@@ -9,3 +9,4 @@
 .externalNativeBuild
 *.a
 *.so
+app/src/main/cpp/include/boost-1.49
