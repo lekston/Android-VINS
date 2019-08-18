@@ -3,25 +3,25 @@
 # value of 3.4.0 or lower.
 
 #工程路径
-#set(pathToProject C:\Users\solomon\Desktop\DJLCv-test\DJLCv-test)
 #OpenCV-android-sdk路径
-#set(pathToOpenCv C:/Users/solomon/Desktop/OpenCV-3.1.0-android-sdk/OpenCV-android-sdk)
-set(pathToProject D:/workspace/code/slam/VINS-Android)
+#set(pathToOpenCv /opt/local)
+set(pathToProject /opt/01.src/AndroidStudioProjects/Android-VINS)
+set(boostForAndroid /opt/02.installs/Boost-for-Android/pre-build/boost_1.69.0_prebuilt_ndk_19c)
+set(pathToOpenCV /opt/01.src/Android/OpenCV-android-sdk/)
 
 #CMake版本信息
 cmake_minimum_required(VERSION 3.4.1)
 #支持-std=gnu++11
 set(CMAKE_VERBOSE_MAKEFILE on)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11 -lz ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11 -lz -static-libstdc++")
 
 #配置加载native依赖
 include_directories(${pathToProject}/app/src/main/cpp/include/opencv)
 
 include_directories(${pathToProject}/app/src/main/cpp/include/CL)
 include_directories(${pathToProject}/app/src/main/cpp/include/eigen3)
-include_directories(${pathToProject}/app/src/main/cpp/include/boost-1.49)
 include_directories(${pathToProject}/app/src/main/cpp/include/)
-
+include_directories(${boostForAndroid}/include/)
 
 include_directories(${pathToProject}/app/src/main/cpp/include/ceres-solver/include)
 include_directories(${pathToProject}/app/src/main/cpp/include/ceres-solver/internal)
@@ -29,8 +29,24 @@ include_directories(${pathToProject}/app/src/main/cpp/include/ceres-solver/inter
 include_directories(${pathToProject}/app/src/main/cpp/include/ceres-solver/config)
 include_directories(${pathToProject}/app/src/main/cpp/src/camera_model/include)
 
-
 #静态方式加载
+add_library( lib-std-cpp STATIC IMPORTED )
+set_target_properties( lib-std-cpp PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libstdc++.a)
+add_library( lib-std-cpp-shared SHARED IMPORTED )
+set_target_properties( lib-std-cpp-shared PROPERTIES IMPORTED_LOCATION /opt/android/android-ndk-r19b/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libstdc++.so)
+
+add_library( lib-cpp-static STATIC IMPORTED )
+set_target_properties( lib-cpp-static PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libc++_static.a)
+add_library( lib-c STATIC IMPORTED )
+set_target_properties( lib-c PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libc.a)
+add_library( lib-m STATIC IMPORTED )
+set_target_properties( lib-m PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libm.a)
+add_library( lib-z STATIC IMPORTED )
+set_target_properties( lib-z PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libz.a)
+add_library( lib-dl STATIC IMPORTED )
+set_target_properties( lib-dl PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libdl.a)
+
+# openCV
 add_library( lib_opencv_calib3d STATIC IMPORTED )
 set_target_properties(lib_opencv_calib3d PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libopencv_calib3d.a)
 
@@ -82,26 +98,26 @@ set_target_properties(lib_opencv_videoio PROPERTIES IMPORTED_LOCATION ${pathToPr
 add_library( lib_opencv_videostab STATIC IMPORTED )
 set_target_properties(lib_opencv_videostab PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libopencv_videostab.a)
 
-#add_library( lib_tbb STATIC IMPORTED )
-#set_target_properties(lib_tbb PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libtbb.a)
+add_library( lib_tbb STATIC IMPORTED )
+set_target_properties(lib_tbb PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/libtbb.a)
 
-#add_library( lib_IlmImf STATIC IMPORTED )
-#set_target_properties(lib_IlmImf PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libIlmImf.a)
+add_library( lib_IlmImf STATIC IMPORTED )
+set_target_properties(lib_IlmImf PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/libIlmImf.a)
 
-#add_library( lib_libjasper STATIC IMPORTED )
-#set_target_properties(lib_libjasper PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/liblibjasper.a)
+add_library( lib_libjasper STATIC IMPORTED )
+set_target_properties(lib_libjasper PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/liblibjasper.a)
 
 #add_library( lib_libjpeg STATIC IMPORTED )
 #set_target_properties(lib_libjpeg PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/liblibjpeg.a)
 
-#add_library( lib_libpng STATIC IMPORTED )
-#set_target_properties(lib_libpng PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/liblibpng.a)
+add_library( lib_libpng STATIC IMPORTED )
+set_target_properties(lib_libpng PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/liblibpng.a)
 
-#add_library( lib_libtiff STATIC IMPORTED )
-#set_target_properties(lib_libtiff PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/liblibtiff.a)
+add_library( lib_libtiff STATIC IMPORTED )
+set_target_properties(lib_libtiff PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/liblibtiff.a)
 
-#add_library( lib_libwebp STATIC IMPORTED )
-#set_target_properties(lib_libwebp PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/liblibwebp.a)
+add_library( lib_libwebp STATIC IMPORTED )
+set_target_properties(lib_libwebp PROPERTIES IMPORTED_LOCATION ${pathToOpenCV}/sdk/native/3rdparty/libs/${ANDROID_ABI}/liblibwebp.a)
 
 add_library( opencv SHARED IMPORTED )
 set_target_properties(opencv PROPERTIES IMPORTED_LOCATION ${pathToProject}/app/src/main/jniLibs/${ANDROID_ABI}/libopencv_java3.so)
@@ -113,19 +129,18 @@ add_library(lib-ceres STATIC IMPORTED)
 set_target_properties(lib-ceres PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/main/jniLibs/${ANDROID_ABI}/libceres.a)
 
 add_library(lib-boost-filesystem STATIC IMPORTED)
-set_target_properties(lib-boost-filesystem PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/main/jniLibs/${ANDROID_ABI}/libboost_filesystem-gcc-mt-1_49.a)
-
-add_library(lib-boost-program-options STATIC IMPORTED)
-set_target_properties(lib-boost-program-options PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/main/jniLibs/${ANDROID_ABI}/libboost_program_options-gcc-mt-1_49.a)
+set_target_properties(lib-boost-filesystem PROPERTIES IMPORTED_LOCATION ${boostForAndroid}/libs/llvm/${ANDROID_ABI}/libboost_filesystem.a)
 
 add_library(lib-boost-system STATIC IMPORTED)
-set_target_properties(lib-boost-system PROPERTIES IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/main/jniLibs/${ANDROID_ABI}/libboost_system-gcc-mt-1_49.a)
+set_target_properties(lib-boost-system PROPERTIES IMPORTED_LOCATION ${boostForAndroid}/libs/llvm/${ANDROID_ABI}/libboost_system.a)
 
+add_library(lib-boost-program-options STATIC IMPORTED)
+set_target_properties(lib-boost-program-options PROPERTIES IMPORTED_LOCATION ${boostForAndroid}/libs/llvm/${ANDROID_ABI}/libboost_program_options.a)
 #find_package(ceres REQUIRED)
 
 #C++日志
 find_library( log-lib log )
-find_library(opencl-lib OpenCL)
+
 #CPP文件夹下带编译的cpp文件
 add_library( native-lib SHARED src/main/cpp/native-lib.cpp
     src/main/cpp/src/vins_estimator/src/estimator_node.cpp
@@ -164,7 +179,7 @@ add_library( native-lib SHARED src/main/cpp/native-lib.cpp
     src/main/cpp/src/camera_model/src/camera_models/CataCamera.cc
     src/main/cpp/src/camera_model/src/camera_models/EquidistantCamera.cc
     src/main/cpp/src/camera_model/src/camera_models/ScaramuzzaCamera.cc
-   src/main/cpp/src/camera_model/src/sparse_graph/Transform.cc
+    src/main/cpp/src/camera_model/src/sparse_graph/Transform.cc
     src/main/cpp/src/camera_model/src/gpl/gpl.cc
     src/main/cpp/src/camera_model/src/gpl/EigenQuaternionParameterization.cc
 
@@ -178,8 +193,11 @@ target_link_libraries( native-lib
 
                       #  OpenCL
                         lib-ceres
-                       lib-boost-filesystem
-                       lib-boost-program-options
+                        lib-boost-filesystem
+                        lib-boost-program-options
                         lib-boost-system
-                         #   lib_tbb lib_IlmImf lib_libjasper lib_libjpeg lib_libpng lib_libtiff lib_libwebp
-                       )
+                        lib_libjasper lib_libpng lib_libtiff lib_libwebp lib_IlmImf
+                     #  lib_libjpeg lib_tbb lib-std-cpp lib-std-cpp-shared lib-c
+                        lib-m lib-z lib-dl
+                        lib-std-cpp-shared
+        )
