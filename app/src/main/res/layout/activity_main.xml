@@ -23,18 +23,20 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:weightSum="2">
+
         <Button
             android:id="@+id/pic"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="恢复图片"
-            android:layout_weight="1"/>
+            android:layout_weight="1"
+            android:text="Restore Image" />
+
         <Button
             android:id="@+id/gray_pic"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="处理图片"
-            android:layout_weight="1"/>
+            android:layout_weight="1"
+            android:text="Process Image" />
 
     </LinearLayout>
     <ImageView

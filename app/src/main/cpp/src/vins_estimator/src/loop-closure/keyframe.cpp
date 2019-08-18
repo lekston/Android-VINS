@@ -361,7 +361,8 @@ void BriefExtractor::operator() (const cv::Mat &im, const std::vector<cv::Point2
 {
   // extract FAST keypoints with opencv
   const int fast_th = 20; // corner detector response threshold
-  cv::FAST(im, keys, fast_th, true);
+  cv::Ptr<cv::FastFeatureDetector> detector=cv::FastFeatureDetector::create(fast_th);
+  detector->detect(im, keys);
   for(int i = 0; i < (int)window_pts.size(); i++)
   {
       cv::KeyPoint key;

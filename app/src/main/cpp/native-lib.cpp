@@ -15,6 +15,8 @@
 #define LOG_TAG "openclTest"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define PATH_TO_DATA /sdcard/zz_prl/vins/
+#define CONCAT_PATH(FILE) PATH_TO_DATA ## FILE
 using namespace cv;
 using namespace std;
 extern int vins_estimator_main(const string &config, const string &imageData, const string &timestamp, const string & imuData );
@@ -45,7 +47,7 @@ void testBoost()
     double b = lexical_cast<double>("123.12");
     LOGD("A: %d",a);
     LOGD("B: %lf",b);
-    if (!boost::filesystem::exists(inputDir) && !boost::filesystem::is_directory(inputDir));
+    if (!boost::filesystem::exists(inputDir) && !boost::filesystem::is_directory(inputDir))
         LOGD("filesystem test pass");
 }
 #if 1
@@ -142,7 +144,7 @@ jstring
 Java_com_hezhaoxin_solomon_vins_1android_NDKloader_stringFromJNI(
         JNIEnv *env,
         jobject /* this */) {
-    std::string hello = "opencv图像处理";
+    std::string hello = "Native OpenCV is supported";
     return env->NewStringUTF(hello.c_str());
 }
 jstring
@@ -182,12 +184,17 @@ Java_com_hezhaoxin_solomon_vins_1android_NDKloader_getGrayImage(
     jintArray result = env->NewIntArray(size);
     env->SetIntArrayRegion(result, 0, size, pixels);
     env->ReleaseIntArrayElements(pixels_, pixels, 0);
-      testOcl();
-    //  LOGuD("HELLO WORLD");
+    testOcl();
     testEigen();
-    testCeres();
     testBoost();
-     LOGD("TEST LOG");
-    vins_estimator_main("/data/vins/euroc_config.yaml", "/data/vins/data/image/MH_01_easy/data", "/data/vins/data/timestamps/MH01.txt", "/data/vins/data/imu/data.csv" );
+    //LOGD("Starting CERES test...");
+    //testCeres();
+    LOGD("Tests OK");
+
+    std::string path{"/sdcard/zz_prl/vins/"};
+    vins_estimator_main((path + "euroc_config.yaml"),
+                        (path + "MH_04/data"),
+                        (path + "MH_04/timestamps.txt"),
+                        (path + "MH_04/imu.csv") );
     return result;
 }

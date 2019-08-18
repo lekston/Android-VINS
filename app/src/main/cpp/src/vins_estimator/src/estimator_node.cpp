@@ -4,8 +4,6 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-//#include <ros/ros.h>
-//#include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
 
 #include "estimator.h"
@@ -37,9 +35,6 @@
 
 vector<uchar> r_status;
 vector<float> r_err;
-
-//ros::Publisher pub_img,pub_match;
-//ros::Publisher pub_match;
 
 FeatureTracker trackerData[NUM_OF_CAM];
 double first_image_time;
@@ -73,6 +68,8 @@ std::mutex m_keyframedatabase_resample;
 std::mutex m_update_visualization;
 std::mutex m_keyframe_buf;
 std::mutex m_retrive_data_buf;
+
+std::thread measurement_process;
 
 double latest_time;
 Eigen::Vector3d tmp_P;
@@ -155,21 +152,18 @@ getMeasurements()
 
     while (true)
     {
-      
         if (imu_buf.empty() || feature_buf.empty())	   
             return measurements;
         if (!(imu_buf.back()->header.stamp > feature_buf.front()->header.stamp))
         {
-       //     ROS_WARN("wait for imu, only should happen at the beginning");
-	    cout << "WARN: wait for imu, only should happen at the beginning" << endl;
+	        LOGD("WARN: wait for imu, only should happen at the beginning");
             sum_of_wait++;
             return measurements;
         }
 
         if (!(imu_buf.front()->header.stamp < feature_buf.front()->header.stamp))
         {
-        //    ROS_WARN("throw img, only should happen at the beginning");
-	    cout << "WARN: throw img, only should happen at the beginning" << endl;
+    	    LOGD("WARN: throw img, only should happen at the beginning");
             feature_buf.pop();
             continue;
         }
@@ -182,7 +176,7 @@ getMeasurements()
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
-     //   LOGD("IMUs end data timestamp: %f , IMUs size %d , img_msg timestamp: %f" , IMUs.back()->header.stamp.toSec(), IMUs.size(), img_msg->header.stamp.toSec() );
+        LOGD("IMUs end data timestamp: %f , IMUs size %d , img_msg timestamp: %f" , IMUs.back()->header.stamp.toSec(), IMUs.size(), img_msg->header.stamp.toSec() );
         measurements.emplace_back(IMUs, img_msg);
     }
     return measurements;
@@ -284,17 +278,16 @@ void process_loop_detection()
             loop_succ = loop_closure->startLoopClosure(cur_kf->keypoints, cur_kf->descriptors, cur_pts, old_pts, old_index);
             double t_loop = t_loopdetect.toc();
             //ROS_DEBUG("t_loopdetect %f ms", t_loop);
-	    // cout << "t_loopdetect %f ms" << t_loop << endl;
+	        // cout << "t_loopdetect %f ms" << t_loop << endl;
             if(loop_succ)
             {
                 KeyFrame* old_kf = keyframe_database.getKeyframe(old_index);
                 if (old_kf == NULL)
                 {
-                   // ROS_WARN("NO such frame in keyframe_database");
-		  cout << "WARN: NO such frame in keyframe_database" << endl;
-                   // ROS_BREAK();
-		  //break;
-		  continue;
+                    // ROS_WARN("NO such frame in keyframe_database");
+                    cout << "WARN: NO such frame in keyframe_database" << endl;
+                    //break;
+                    continue;
                 }
            //     ROS_DEBUG("loop succ %d with %drd image", global_frame_cnt, old_index);
 		//cout << "loop succ " <<global_frame_cnt <<  " with " << old_index << "rd image" << endl;
@@ -423,6 +416,7 @@ void process_loop_detection()
         }
         std::chrono::milliseconds dura(10);
         std::this_thread::sleep_for(dura);
+        LOGD("PING from detection thread");
     }
 }
 
@@ -448,7 +442,7 @@ void process_pose_graph()
                                                     correct_t,
                                                     correct_r);
        //     ROS_DEBUG("t_posegraph %f ms", t_posegraph.toc());
-	    cout << "t_posegraph " <<  t_posegraph.toc() << " ms"<<endl; 
+	        cout << "t_posegraph " <<  t_posegraph.toc() << " ms"<<endl;
             m_loop_drift.lock();
             relocalize_r = correct_r;
             relocalize_t = correct_t;
@@ -465,6 +459,7 @@ void process_pose_graph()
 
         std::chrono::milliseconds dura(5000);
         std::this_thread::sleep_for(dura);
+        LOGD("PING from pose_graph thread");
     }
 }
 
@@ -475,11 +470,14 @@ void process()
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
         std::unique_lock<std::mutex> lk(m_buf);
-        con.wait(lk, [&]
-                 {
-            return (measurements = getMeasurements()).size() != 0;
-                 });
-        lk.unlock();
+        con.wait_for(lk, std::chrono::milliseconds(500), [&]() -> bool {
+            measurements = getMeasurements();
+            return (measurements.size() != 0);
+        });
+
+        if (measurements.size() == 0) {
+            continue;
+        }
 
         for (auto &measurement : measurements)
         {
@@ -487,8 +485,8 @@ void process()
                 send_imu(imu_msg);
 
             auto img_msg = measurement.second;
-      //      ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
-	//    cout << "processing vision data with stamp "<<  img_msg->header.stamp.toSec() << endl;
+
+	        LOGD("processing vision data with stamp %f", img_msg->header.stamp.toSec());
 
             TicToc t_s;
             map<int, vector<pair<int, Vector3d>>> image;
@@ -500,8 +498,7 @@ void process()
                 double x = img_msg->points[i].x;
                 double y = img_msg->points[i].y;
                 double z = img_msg->points[i].z;
-                //ROS_ASSERT(z == 1);
-		assert(z == 1);
+		        assert(z == 1);
                 image[feature_id].emplace_back(camera_id, Vector3d(x, y, z));
             }
             estimator.processImage(image, img_msg->header);
@@ -564,8 +561,7 @@ void process()
                             KeyFrame* cur_kf = keyframe_database.getKeyframe(estimator.retrive_data_vector[0].cur_index);                            
                             if (abs(estimator.retrive_data_vector[0].relative_yaw) > 30.0 || estimator.retrive_data_vector[0].relative_t.norm() > 20.0)
                             {
-                           //     ROS_DEBUG("Wrong loop");
-			      cout << "Wrong loop" <<endl;
+			                    cout << "Wrong loop" <<endl;
                                 cur_kf->removeLoop();
                             }
                             else 
@@ -599,7 +595,6 @@ void process()
         //    pubPointCloud(estimator, header, relocalize_t, relocalize_r);
        //     pubTF(estimator, header, relocalize_t, relocalize_r);
             m_loop_drift.unlock();
-            //ROS_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
         }
         m_buf.lock();
         m_state.lock();
@@ -607,6 +602,9 @@ void process()
             update();
         m_state.unlock();
         m_buf.unlock();
+
+        measurements.clear();
+        LOGD("PING from visual-inerial ODOM thread");
     }
 }
 
@@ -639,26 +637,22 @@ void img_callback(const cv::Mat &show_img, const ros::Time &timestamp)
     else
         PUB_THIS_FRAME = false;
 
-  //  cv_bridge::CvImageConstPtr ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
-  //  cv::Mat show_img = ptr->image;
     TicToc t_r;
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
        // ROS_DEBUG("processing camera %d", i);
         if (i != 1 || !STEREO_TRACK)
             //trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)));
-	  trackerData[i].readImage(show_img.rowRange(ROW * i, ROW * (i + 1)));
+	        trackerData[i].readImage(show_img.rowRange(ROW * i, ROW * (i + 1)));
         else
         {
             if (EQUALIZE)
             {
                 cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
-               // clahe->apply(ptr->image.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
-		clahe->apply(show_img.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
+		        clahe->apply(show_img.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
             }
             else
-              //  trackerData[i].cur_img = ptr->image.rowRange(ROW * i, ROW * (i + 1));
-	      trackerData[i].cur_img = show_img.rowRange(ROW * i, ROW * (i + 1));
+                trackerData[i].cur_img = show_img.rowRange(ROW * i, ROW * (i + 1));
         }
 
 #if SHOW_UNDISTORTION
@@ -732,7 +726,7 @@ void img_callback(const cv::Mat &show_img, const ros::Time &timestamp)
         sensor_msgs::ChannelFloat32 v_of_point;
 
       //  feature_points->header = img_msg->header;
-	feature_points->header.stamp = timestamp; //here need to double check,because of missing seq variable assignment
+        feature_points->header.stamp = timestamp; //here need to double check,because of missing seq variable assignment
         feature_points->header.frame_id = "world";
 
         vector<set<int>> hash_ids(NUM_OF_CAM);
@@ -784,18 +778,12 @@ void img_callback(const cv::Mat &show_img, const ros::Time &timestamp)
         feature_points->channels.push_back(id_of_point);
         feature_points->channels.push_back(u_of_point);
         feature_points->channels.push_back(v_of_point);
-  //      ROS_INFO("publish %f, at %f", feature_points->header.stamp.toSec(), ros::Time::now().toSec());
-     //   pub_img.publish(feature_points);
+
         feature_callback(feature_points);          //add
-	
 
         if (SHOW_TRACK)
         {
-     //       ptr = cv_bridge::cvtColor(ptr, sensor_msgs::image_encodings::BGR8);
-
-            //cv::Mat stereo_img(ROW * NUM_OF_CAM, COL, CV_8UC3);
-      //      cv::Mat stereo_img = ptr->image;
-	    cv::Mat stereo_img;
+	        cv::Mat stereo_img = show_img;
             for (int i = 0; i < NUM_OF_CAM; i++)
             {
                 cv::Mat tmp_img = stereo_img.rowRange(i * ROW, (i + 1) * ROW);
@@ -842,20 +830,23 @@ void LoadImages(const string &strImagePath, const string &strTimesStampsPath,
     ifstream fTimes;
     fTimes.open(strTimesStampsPath.c_str());
     timeStamps.reserve(5000); //reserve vector space
-    strImagesFileNames.reserve(5000); 
+    strImagesFileNames.reserve(5000);
+    // skip the first line
+    string tmp;
+    getline(fTimes, tmp);
     while(!fTimes.eof())
     {
-	string s;
-	getline(fTimes,s);
-	if(!s.empty())
-	{
-	    stringstream ss;
-	    ss << s;
-	    strImagesFileNames.push_back(strImagePath + "/" + ss.str() + ".png");
-	    double t;
-	    ss >> t;
-	    timeStamps.push_back(t/1e9);
-	}
+        string s;
+        getline(fTimes,s);
+        if(!s.empty())
+        {
+            stringstream ss;
+            long long t;
+            ss << s;
+            ss >> t;
+            timeStamps.push_back(t*1.0/1e9);
+            strImagesFileNames.push_back(strImagePath + "/" + std::to_string(t) + ".png");
+        }
     }
 }
 /******************* load image end ***********************/
@@ -867,43 +858,44 @@ void LoadImus(ifstream & fImus, const ros::Time &imageTimestamp)
 
     while(!fImus.eof())
     {
-	string s;
-	getline(fImus,s);
-	if(!s.empty())
-	{
-	   char c = s.at(0);
- 	   if(c<'0' || c>'9')      //remove first line in data.csv
-		       continue;       
-	    stringstream ss;
-	    ss << s;
-	    double tmpd;
-	    int cnt=0;
-	    double data[7];
-	    while(ss >> tmpd)
-	    {
-		data[cnt] = tmpd;
-		cnt++;
-		if(cnt ==7)
-		  break;
-		if(ss.peek() == ',' || ss.peek() == ' ')
-		  ss.ignore();
-	    }
-	    data[0] *=1e-9; //convert to second unit
-	    sensor_msgs::ImuPtr imudata(new sensor_msgs::Imu);
-	    imudata->angular_velocity.x = data[1];
-	    imudata->angular_velocity.y = data[2];
-	    imudata->angular_velocity.z = data[3];
-	    imudata->linear_acceleration.x = data[4];
-	    imudata->linear_acceleration.y = data[5];
-	    imudata->linear_acceleration.z = data[6];
-		uint32_t  sec = data[0];
-		uint32_t nsec = (data[0]-sec)*1e9;
-		nsec = (nsec/1000)*1000+500;
-	    imudata->header.stamp = ros::Time(sec,nsec);
-	    imu_callback(imudata);
-	    if (imudata->header.stamp > imageTimestamp)       //load all imu data produced in interval time between two consecutive frams 
-	      break;
-	}
+        string s;
+        getline(fImus,s);
+        if(!s.empty())
+        {
+            char c = s.at(0);
+            if(c<'0' || c>'9')      //remove first line in data.csv
+                continue;
+
+            stringstream ss;
+            ss << s;
+            double tmpd;
+            int cnt=0;
+            double data[7];
+            while(ss >> tmpd)
+            {
+                data[cnt] = tmpd;
+                cnt++;
+                if(cnt ==7)
+                    break;
+                if(ss.peek() == ',' || ss.peek() == ' ')
+                    ss.ignore();
+            }
+            data[0] *=1e-9; //convert to second unit
+            sensor_msgs::ImuPtr imudata(new sensor_msgs::Imu);
+            imudata->angular_velocity.x = data[1];
+            imudata->angular_velocity.y = data[2];
+            imudata->angular_velocity.z = data[3];
+            imudata->linear_acceleration.x = data[4];
+            imudata->linear_acceleration.y = data[5];
+            imudata->linear_acceleration.z = data[6];
+            uint32_t  sec = data[0];
+            uint32_t nsec = (data[0]-sec)*1e9;
+            nsec = (nsec/1000)*1000+500;
+            imudata->header.stamp = ros::Time(sec,nsec);
+            imu_callback(imudata);
+            if (imudata->header.stamp > imageTimestamp)       //load all imu data produced in interval time between two consecutive frams
+                break;
+        }
     }
 }
 /******************* load IMU end ***********************/
@@ -929,81 +921,74 @@ int vins_estimator_main(const string &config, const string &imageData, const str
     estimator.setParameter();
     for (int i = 0; i < NUM_OF_CAM; i++)
         trackerData[i].readIntrinsicParameter(CAM_NAMES[i]); //add
-//#ifdef EIGEN_DONT_PARALLELIZE
-   // ROS_DEBUG("EIGEN_DONT_PARALLELIZE");
-//#endif
-  //  ROS_WARN("waiting for image and imu...");
-    
 
-
-
-  //  registerPub(n);
     vector<string> vStrImagesFileNames;
     vector<double> vTimeStamps;
     LoadImages(imageData,timestamp,vStrImagesFileNames,vTimeStamps);
-    
+
     int imageNum = vStrImagesFileNames.size();
     
     if(imageNum<=0)
     {
-	cerr << "ERROR: Failed to load images" << endl;
-	return 1;
+    	cerr << "ERROR: Failed to load images" << endl;
+	    return 1;
     }
-    
-    std::thread measurement_process{process};
-    measurement_process.detach();
+
+    LOGD("VINS got %d images", imageNum);
+
+    if (!measurement_process.joinable())
+        measurement_process = std::thread{process};
+
     std::thread loop_detection, pose_graph;
     if (LOOP_CLOSURE)
-     {     
-		 loop_detection = std::thread(process_loop_detection);   
-		 pose_graph = std::thread(process_pose_graph);
-		 loop_detection.detach();
-		 pose_graph.detach();
-		 m_camera = CameraFactory::instance()->generateCameraFromYamlFile(CAM_NAMES_ESTIMATOR);
-	 }
+    {
+        loop_detection = std::thread(process_loop_detection);
+        pose_graph = std::thread(process_pose_graph);
+        loop_detection.detach();
+        pose_graph.detach();
+        m_camera = CameraFactory::instance()->generateCameraFromYamlFile(CAM_NAMES_ESTIMATOR);
+    }
 	for(ni=0; ni<imageNum; ni++)
     {
       
-      double  tframe = vTimeStamps[ni];   //timestamp
-	  uint32_t  sec = tframe;
-      uint32_t nsec = (tframe-sec)*1e9;
-      nsec = (nsec/1000)*1000+500;
-      ros::Time image_timestamp = ros::Time(sec, nsec);
-       // read imu data
-       LoadImus(fImus,image_timestamp);
+        double  tframe = vTimeStamps[ni];   //timestamp
+        uint32_t  sec = tframe;
+        uint32_t nsec = (tframe-sec)*1e9;
+        nsec = (nsec/1000)*1000+500;
+        ros::Time image_timestamp = ros::Time(sec, nsec);
+        // read imu data
+        LoadImus(fImus,image_timestamp);
        
-	//read image from file
-      image = cv::imread(vStrImagesFileNames[ni],CV_LOAD_IMAGE_UNCHANGED);
-      
-      if(image.empty())
-      {
-	  cerr << endl << "Failed to load image: " << vStrImagesFileNames[ni] <<endl;
-	  return 1;
-      }
-      std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-      
-      
-      //TODO process image
-      img_callback(image, image_timestamp);
-      
-      
-      std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-      
-      double timeSpent =std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1).count();
-      
-      //wait to load the next frame image
-      double T=0;
-      if(ni < imageNum-1)
-	T = vTimeStamps[ni+1]-tframe; //interval time between two consecutive frames,unit:second
-      else if(ni>0)    //lastest frame
-	T = tframe-vTimeStamps[ni-1];
-      
-      if(timeSpent < T)
-	usleep((T-timeSpent)*1e6); //sec->us:1e6
-      else
-      ;
-	//cerr << endl << "process image speed too slow, larger than interval time between two consecutive frames" << endl;
-      
+        //read image from file
+        image = cv::imread(vStrImagesFileNames[ni],CV_LOAD_IMAGE_UNCHANGED);
+
+        if(image.empty())
+        {
+            LOGD("Failed to load image: %s", vStrImagesFileNames[ni].c_str());
+            return 1;
+        }
+        std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+
+        //TODO process image
+        img_callback(image, image_timestamp);
+
+        std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+
+        double timeSpent =std::chrono::duration_cast<std::chrono::duration<double>>(t2-t1).count();
+
+        //wait to load the next frame image
+        double T=0;
+        if(ni < imageNum-1)
+            T = vTimeStamps[ni+1]-tframe; //interval time between two consecutive frames,unit:second
+        else if(ni>0)    //lastest frame
+            T = tframe-vTimeStamps[ni-1];
+
+        if(timeSpent < T)
+            usleep((T-timeSpent)*1e6); //sec->us:1e6
+        else
+            ;
+        //cerr << endl << "process image speed too slow, larger than interval time between two consecutive frames" << endl;
+
     }
 /******************* load image end ***********************/
     return 0;
